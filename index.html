@@ -1,0 +1,647 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KBS TV PRO - Smart TV Edition</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800;900&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+    
+    <style>
+        :root {
+            --netflix-red: #e50914;
+            --netflix-black: #101014;
+            --card-bg: #1f1f24;
+            --text-main: #ffffff;
+            --text-muted: #8b92a5;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        body {
+            background-color: var(--netflix-black);
+            color: var(--text-main);
+            font-family: 'Inter', sans-serif;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        ::-webkit-scrollbar { height: 6px; }
+        ::-webkit-scrollbar-track { background: rgba(0,0,0,0.2); }
+        ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 10px; }
+
+        /* ================= HEADER ================= */
+        header {
+            height: 60px;
+            background: rgba(16, 16, 20, 0.95);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 4%;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            z-index: 10;
+            transition: opacity 0.4s ease, transform 0.4s ease;
+        }
+
+        .brand-logo {
+            font-size: 1.2rem;
+            font-weight: 900;
+            letter-spacing: -0.5px;
+            color: #fff;
+        }
+
+        .brand-logo span {
+            color: var(--netflix-red);
+        }
+
+        .live-pill {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            background: rgba(0, 0, 0, 0.5);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.7rem;
+            font-weight: 700;
+        }
+
+        .dot {
+            width: 7px;
+            height: 7px;
+            background: var(--netflix-red);
+            border-radius: 50%;
+            box-shadow: 0 0 8px var(--netflix-red);
+            animation: pulse 1.5s infinite;
+        }
+
+        .dot.loading {
+            background: #ffc107;
+            box-shadow: 0 0 8px #ffc107;
+        }
+
+        @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.3; } 100% { opacity: 1; } }
+
+        /* ================= ÁREA DO PLAYER ================= */
+        #main-content {
+            flex: 1;
+            background: #000;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            position: relative;
+        }
+
+        #player-container {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        video {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            background: #000;
+            outline: none;
+        }
+
+        .player-info-overlay {
+            position: absolute;
+            bottom: 25px;
+            left: 20px;
+            background: rgba(0, 0, 0, 0.7);
+            backdrop-filter: blur(8px);
+            padding: 8px 16px;
+            border-radius: 8px;
+            border-left: 4px solid var(--netflix-red);
+            z-index: 5;
+            pointer-events: none;
+            transition: opacity 0.4s ease;
+        }
+
+        .player-channel-name {
+            font-size: 1rem;
+            font-weight: 800;
+            color: #fff;
+        }
+
+        .player-channel-group {
+            font-size: 0.65rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        /* ================= ROLETA HORIZONTAL (OCULTÁVEL) ================= */
+        #roleta-section {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 160px;
+            background: rgba(20, 20, 24, 0.95);
+            backdrop-filter: blur(10px);
+            border-top: 1px solid rgba(255, 255, 255, 0.06);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            padding: 0 20px;
+            box-shadow: 0 -10px 30px rgba(0,0,0,0.8);
+            z-index: 20;
+            transition: transform 0.4s cubic-bezier(0.25, 0.8, 0.25, 1), opacity 0.4s ease;
+        }
+
+        /* Estado Oculto da barra */
+        body.hide-ui header,
+        body.hide-ui #roleta-section,
+        body.hide-ui .player-info-overlay {
+            opacity: 0;
+            pointer-events: none;
+        }
+        body.hide-ui #roleta-section {
+            transform: translateY(100%);
+        }
+
+        .roleta-titulo {
+            font-size: 0.75rem;
+            font-weight: 800;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 8px;
+        }
+
+        .roleta-container {
+            display: flex;
+            gap: 14px;
+            overflow-x: auto;
+            scroll-snap-type: x mandatory;
+            padding-bottom: 8px;
+            scroll-behavior: smooth;
+            outline: none;
+        }
+
+        .roleta-card {
+            flex: 0 0 140px;
+            height: 85px;
+            background: var(--card-bg);
+            border-radius: 10px;
+            cursor: pointer;
+            scroll-snap-align: center;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 8px;
+            border: 2px solid transparent;
+            transition: all 0.25s cubic-bezier(0.25, 0.8, 0.25, 1);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .roleta-card img {
+            max-width: 70%;
+            max-height: 55px;
+            object-fit: contain;
+            filter: drop-shadow(0 2px 4px rgba(0,0,0,0.5));
+            transition: transform 0.25s;
+        }
+
+        .roleta-card:hover {
+            transform: scale(1.05);
+            background: #2a2a30;
+        }
+
+        .roleta-card.active, .roleta-card:focus {
+            border-color: var(--netflix-red);
+            background: #222228;
+            box-shadow: 0 6px 20px rgba(229, 9, 20, 0.4);
+            transform: scale(1.08);
+            outline: none;
+        }
+
+        .roleta-card-name {
+            font-size: 0.6rem;
+            font-weight: 700;
+            color: #ccc;
+            margin-top: 4px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            width: 100%;
+            text-align: center;
+        }
+
+        @media (max-width: 768px) {
+            #roleta-section {
+                height: 145px;
+                padding: 0 10px;
+            }
+            .roleta-card {
+                flex: 0 0 115px;
+                height: 75px;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <div class="brand-logo">📺 KBS TV <span>PRO</span></div>
+        <div class="live-pill">
+            <div id="status-dot" class="dot"></div>
+            <span id="status-text">AO VIVO</span>
+        </div>
+    </header>
+
+    <div id="main-content">
+        <div class="player-info-overlay">
+            <div id="player-channel-name" class="player-channel-name">CARREGANDO...</div>
+            <div id="player-channel-group" class="player-channel-group">AGUARDE</div>
+        </div>
+        <div id="player-container">
+            <video id="video" controls autoplay playsinline></video>
+        </div>
+    </div>
+
+    <div id="roleta-section">
+        <div class="roleta-titulo">Canais Disponíveis (Use as setas do controle)</div>
+        <div id="roleta-container" class="roleta-container" tabindex="0"></div>
+    </div>
+
+    <script>
+        const video = document.getElementById('video');
+        const roletaContainer = document.getElementById('roleta-container');
+        const statusText = document.getElementById('status-text');
+        const statusDot = document.getElementById('status-dot');
+        const playerChannelName = document.getElementById('player-channel-name');
+        const playerChannelGroup = document.getElementById('player-channel-group');
+
+        let hls;
+        let currentUrl = "";
+        let lastTime = 0;
+        let stallCount = 0;
+        let currentIndex = 0;
+        let uiTimeout = null;
+
+        // Função para mostrar a barra de canais e reiniciar o temporizador de 15 segundos para sumir
+        function showUI() {
+            document.body.classList.remove('hide-ui');
+            clearTimeout(uiTimeout);
+            uiTimeout = setTimeout(() => {
+                document.body.classList.add('hide-ui');
+            }, 15000); // 15 segundos inativo
+        }
+
+        // Eventos que detectam movimento do mouse, toque na tela ou teclas do controle
+        window.addEventListener('mousemove', showUI);
+        window.addEventListener('touchstart', showUI);
+        window.addEventListener('keydown', showUI);
+
+        // Força a entrada em tela cheia e libera o áudio no primeiro clique/toque de inicialização da página
+        function ativarTelaCheiaInicial() {
+            video.muted = false;
+            video.play().catch(() => {});
+            const elem = document.documentElement;
+            if (!document.fullscreenElement) {
+                if (elem.requestFullscreen) {
+                    elem.requestFullscreen().catch(() => {});
+                } else if (elem.webkitRequestFullscreen) {
+                    elem.webkitRequestFullscreen();
+                } else if (elem.msRequestFullscreen) {
+                    elem.msRequestFullscreen();
+                }
+            }
+            // Remove o ouvinte inicial após o primeiro toque para não atrapalhar
+            window.removeEventListener('click', ativarTelaCheiaInicial);
+            window.removeEventListener('keydown', ativarTelaCheiaInicial);
+        }
+
+        window.addEventListener('click', ativarTelaCheiaInicial, { once: true });
+        window.addEventListener('keydown', ativarTelaCheiaInicial, { once: true });
+
+        function startAntiStall() {
+            setInterval(() => {
+                if (currentUrl && !video.paused) {
+                    if (video.currentTime === lastTime) {
+                        stallCount++;
+                        statusText.innerText = `RECONECTANDO (${5 - stallCount}s)`;
+                        statusDot.className = "dot loading";
+                        if (stallCount >= 5) {
+                            tocar(canaisArray[currentIndex]);
+                            stallCount = 0;
+                        }
+                    } else {
+                        stallCount = 0;
+                        statusText.innerText = "AO VIVO";
+                        statusDot.className = "dot";
+                        lastTime = video.currentTime;
+                    }
+                }
+            }, 1000);
+        }
+
+        function tocar(canalObj, elemento, index) {
+            document.querySelectorAll('.roleta-card').forEach(el => el.classList.remove('active'));
+            if(elemento) {
+                elemento.classList.add('active');
+                elemento.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+                if (index !== undefined) currentIndex = index;
+            }
+
+            currentUrl = canalObj.url;
+            playerChannelName.innerText = canalObj.nome.toUpperCase();
+            playerChannelGroup.innerText = canalObj.grupo;
+
+            if (hls) hls.destroy();
+            
+            if (Hls.isSupported()) {
+                hls = new Hls({
+                    manifestLoadingMaxRetry: 10,
+                    levelLoadingMaxRetry: 10
+                });
+                hls.loadSource(canalObj.url);
+                hls.attachMedia(video);
+                hls.on(Hls.Events.MANIFEST_PARSED, () => { 
+                    video.play().catch(() => {}); 
+                    statusText.innerText = "AO VIVO";
+                });
+                hls.on(Hls.Events.ERROR, (event, data) => { 
+                    if(data.fatal) {
+                        switch(data.type) {
+                            case Hls.ErrorTypes.NETWORK_ERROR:
+                                hls.startLoad();
+                                break;
+                            case Hls.ErrorTypes.MEDIA_ERROR:
+                                hls.recoverMediaError();
+                                break;
+                            default:
+                                hls.destroy();
+                                break;
+                        }
+                    }
+                });
+            } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+                video.src = canalObj.url;
+                video.play().catch(() => {});
+            }
+
+            showUI(); // Mostra a interface ao trocar de canal e reinicia o timer
+        }
+
+        const m3u = `
+#EXTM3U
+#EXTINF:-1 tvg-id="kbstv.colombo" tvg-name="KBS TV Colombo" tvg-logo="https://yt3.googleusercontent.com/2IVQ9GRPg3OFWtm9qEC4DiHyiKHc-wmUCtR3pPEVhNT0o4gO-HlzWYUxYOS4EKaJ3kys40Gt-Pc=s900-c-k-c0x00ffffff-no-rj" group-title="📺 KBS TV",KBS TV COLOMBO
+https://srv3.zcast.com.br/kbstv/kbstv/playlist.m3u8
+#EXTINF:-1 tvg-id="Canal_3" tvg-name="Canal 3" tvg-logo="https://i.imgur.com/QbYQmYX.png" group-title="Canais",Canal 3
+https://stmv.webtvninjas.com.br/tv3/tv3/playlist.m3u8
+#EXTINF:-1 tvg-id="Canal_SBT" tvg-name="Canal_SBT" tvg-logo="https://upload.wikimedia.org/wikipedia/pt/thumb/4/41/Logotipo_do_SBT.svg/500px-Logotipo_do_SBT.svg.png" group-title="Canais",SBT
+https://s1.micineovs.com/SBT/tracks-v1a1/mono.m3u8?token=16FOTt9Ae2m8
+#EXTINF:-1 tvg-id="GLOBO" tvg-name="GLOBO" tvg-logo="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTtPPgpTFgjtx9a7t6daFf9-IGBi5aJvZnG-nx_nvf6vg&s=10" group-title="Canais",GLOBO
+https://s2.micineovs.com/GLOBO/tracks-v1a1/mono.m3u8?token=16FOTt9Ae2m8
+#EXTINF:-1 tvg-id="NSPRIT" tvg-name="NSPRIT TCL Roku" tvg-logo="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSE5Y4KKG-T5hK6lYOzS0AtcKeDNcua6W83d22c8Z6r2w&s" group-title="Canais",NSPRIT TCL Roku
+https://ogc-nsprt-tcl-roku-syndication.otteravision.com/ogc/nsprt/nsprt_720p.m3u8
+#EXTINF:-1 tvg-id="CazeTV" tvg-logo="https://upload.wikimedia.org/wikipedia/pt/2/22/Logotipo_da_Caz%C3%A9TV.png" group-title="Esportes",Cazé TV
+https://amg01391-amg01391c10-tcl-br-9630.playouts.now.amagi.tv/1080p-cc/index.m3u8
+#EXTINF:-1 tvg-id="JovemPan" tvg-logo="https://jovempan.com.br/wp-content/uploads/sites/2/2026/06/ASSINA_JP.png" group-title="Canais",Jovem Pan
+https://amg01391-amg01391c3-tcl-spain-5038.playouts.now.amagi.tv/playlist1080-p.m3u8
+#EXTINF:-1 tvg-id="RecordNews" tvg-logo="https://grandesnomesdapropaganda.com.br/wp-content/uploads/2022/09/record-news.png" group-title="Canais",Record News
+https://run-rnw-rn.otteravision.com/rnw/rn/rnw_rn_720p_high.m3u8
+#EXTINF:-1 tvg-id="FoxKids" tvg-logo="https://upload.wikimedia.org/wikipedia/commons/thumb/f/fa/FOX_Kids_logo.svg/250px-FOX_Kids_logo.svg.png" group-title="Canais",Fox Kids
+https://stmv2.srvif.com/emlsilva/emlsilva/playlist.m3u8?hls_ctx=h517o66o
+#EXTINF:-1 tvg-id="Runtime" tvg-name="Runtime" tvg-logo="https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEjOaWl3zNJjzy9frEgev6nzBshvK4simQhlYQL7qMiKJ58v3l7goA4HeWR6Za0RpzATFf8W6nDncHYXsVgVdqsSUmCKaH5Oak8uj71sKEw9YKBJ0B__px0EnnZJiiCn0lvo1Y1w4dQ8GmKMLc9s-of6vqcUdIsLcB830KuT3Gu21nTSiXxRgX_smDS6Wk4/s1600/runt.webp" group-title="CANAIS | FILMES E SERIES",Runtime
+https://stream.ads.ottera.tv/playlist.m3u8?network_id=2153
+#EXTINF:-1 tvg-id="Runtime Ação" tvg-name="Runtime Ação" tvg-logo="https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEjuqCxDlLY3RnxMBzKQcuu24VloCW2L0drtv90yrLieLRYXlppia_E_3W17rYqyAhtlbpOKgT1N-SNrAKdD7GxBQ0XGjETkmyV0xtkizRu0cNR3GNQs-izT3BXqYASTOi0mNouqcA9eqqXK6lAeVwyehc8JVMiCQaF_2W3MqBFWcJ3aMaSFrrgjwk_uU_k/s1600/rua.webp" group-title="CANAIS | FILMES E SERIES",Runtime Ação
+https://stream.ads.ottera.tv/playlist.m3u8?network_id=2552
+#EXTINF:-1 tvg-id="Runtime Comédia" tvg-name="Runtime Comédia" tvg-logo="https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEih8vVnAvyf0t3AC09hssQJq09KgW7zTO5HYoLM7_91C1_Qw7-xMbS5vYeSFJCJZTL92huCHSYEy0x9Djc76t1RV4caQpz2WdI8ZVBuQWa5XlV38RIDCbjpyvMu-BfqWzjxEHDejWoPFeSpjpYOhs-1nwEbhfTOb0CjDy-IsXkETqQd_cCKgitn-DCR_94/s1600/runc.webp" group-title="CANAIS | FILMES E SERIES",Runtime Comédia
+https://stream.ads.ottera.tv/playlist.m3u8?network_id=2553
+#EXTINF:-1 tvg-id="Runtime Crime" tvg-name="Runtime Crime" tvg-logo="https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEgnCgAYQr63Tvbq9Dlv-VwDNVs4Yc2M57pAt2ZdZj1Qq9nAjZwWSZDmZVav9G2cIRCy2ckMtDmkWADqRbD_4e5kOEi_eoKVWa_CiENg4mnpmPTYJsVtQe8hyphenhyphenHtHDQ-y5_SlXp1jd_zZZw7yYUWUQonzEn6Aw0NFYrwgDzvnKXzCpouMxG8m4CenVUMZUME/s1600/runcr.webp" group-title="CANAIS | FILMES E SERIES",Runtime Crime
+https://stream.ads.ottera.tv/playlist.m3u8?network_id=4864
+#EXTINF:-1 tvg-id="Runtime Família" tvg-name="Runtime Família" tvg-logo="https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEjh7MKdG9uDiSADMzextnlcG4Hs6XY7zTdwMOunCp3r2nVriUrQgRZZO3ZWIp-acuPA71RslcKgyXtYvfTclOXuel_yLHCu75tGBlPWYwMuK_kAtsiiO0nAVMYuszG9u1lEtbhAGIoBHDQyE4R1Y2SysZBqlk4cG8O7UKvYSEksHSbUGt-bsIQSBmpa2zo/s1600/runtf.webp" group-title="CANAIS | FILMES E SERIES",Runtime Família
+https://stream.ads.ottera.tv/playlist.m3u8?network_id=5589
+#EXTINF:-1 tvg-id="Runtime Romance" tvg-name="Runtime Romance" tvg-logo="https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEhmoc5qVByjBSy4lgqumTqISGth33Kd2wKenKJSlhMicRYJ-guyPshp0trrl8OOeojXy7szfaUIja5PFgENk3rEwr1Sfd6tBRwMpWdrAJIqP_N4gVpqy1EXWd1WcVc7UwpIT7C5cA3nXoRAo96vwguEMDvmUtsM0cXqxIF0tM1CzaaqfZB4QdWP_oz2oA0/s1600/runtr.webp" group-title="CANAIS | FILMES E SERIES",Runtime Romance
+https://stream.ads.ottera.tv/playlist.m3u8?network_id=4866
+#EXTINF:-1 tvg-id="Runtime CinEspanto" tvg-name="Runtime CinEspanto" tvg-logo="https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEhb9lgLJv9iKYk1YffvjL2f-YGh0THU9Us-VEkPrDj8SuFaMbHEQTiHDMfNmzR1Y_QucrkPyqE_VbK6QCArzScDCIZMyKKBiuNkZ4iO0yCZasFzm2FA_l102yYdBaU1vxvtVQgUuAlI37N8BmL1-h_oMyeg6mZ1Wgct7fHtlQoJWY0vlkkA4MRmviwbM7Q/s1600/runtime_cinespanto_16x9_1.jpg" group-title="CANAIS | FILMES E SERIES",Runtime CinEspanto
+https://stream.ads.ottera.tv/playlist.m3u8?network_id=4865
+#EXTINF:-1 tvg-id="Filmelier Tv" tvg-name="Filmelier Tv" tvg-logo="https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEgKFqoSPuSVS48c3vMYINkZ7FpE4Q1MfEMG9M8-jDs880IdHqaUmdXXFwjMIB9QsOqDhl34u1PhUzCiTOHRP4qBOwrSPMG3PN4d1a0LgeNmzphknJH6DWND3RZyx7Zy6smq0QFFEQzJ0pzjAtiFke0qNuytF-skQ0P7R0yAV3qU5mVRb7YKuPBHVhs50hQ/s1600/filmeliertv.jpg" group-title="CANAIS | FILMES E SERIES",Filmelier Tv
+https://amg00740-sofa-amg00740c8-tcl-us-7180.playouts.now.amagi.tv/1080p-cc/index.m3u8
+#EXTINF:-1 tvg-id="Cine Clássicos de Cinema" tvg-name="Cine Clássicos de Cinema" tvg-logo="https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEgFOQtfpVzaopAgL9m6ABk62KKzhufoXB6cimUd2ECXMLe8LMXxljU-hPoQy2gaXvB458hcly_wPzkLn3DAv4gnNt57IAYbLkyiIK5Z0lG5Uqj_23ZiaXtHB9YlW0KBPLQ7IJcfGalyia5I_RoB5rPFmSNhW4QdvGF8A6ViCnnhFNS_PzLqVzei_6JU1J4/s1600/cine-classicos-do-cinema.png" group-title="CANAIS | FILMES E SERIES",Cine Clássicos de Cinema
+https://live20.bozztv.com/giatvplayout7/giatv-208272/tracks-v1a1/mono.ts.m3u8
+#EXTINF:-1 tvg-id="Adrenalina Pura Tv" tvg-name="Adrenalina Pura Tv" tvg-logo="https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEjpXcvqc14zXOxjaRMi_ZfrHqd7mK1sBwu6sjF53KRHkLW7PyXuY0CGP0gPx5jD6LHUiqIdoyugAm_3yLf9skkvL3oEX-sLeHpj3XBKm5Bp-dachH372GP5Iu1-XFX_jzP64HvOghcG5sEQcQtsnmZuC1I3fpNYTn6eQSfsivXVhfnL-RQkG6HZhDmIUV4/s1600/adrenalina-pura-tv.jpg" group-title="CANAIS | FILMES E SERIES",Adrenalina Pura Tv
+https://amg00740-sofa-amg00740c7-lg-br-7305.playouts.now.amagi.tv/1080p-cc-hevc/index.m3u8
+#EXTINF:-1 tvg-id="Moviesphere Brazil" tvg-name="Moviesphere Brazil" tvg-logo="https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEjgq4a5lPgdBU5wWyOX23bIBFzddC_gQK8bba9Of-eWZ4_MPkIW3Y0knMelh5TFOJ7iq0-WBftPzaACP1a95ZctDl4kneEjOrqI1wiwlYYClErXBLKtRQOZxK8Z9e1bxS3mrnTANIO0wGp9FDms4olyKnvmjlxLTpA15qB_lDX1QKUeuklC6cpfkiaQdf0/s1600/mvsp.webp" group-title="CANAIS | FILMES E SERIES",Moviesphere Brazil
+https://stream.ads.ottera.tv/playlist.m3u8?network_id=6178
+#EXTINF:-1 tvg-id="Grjngo" tvg-name="Grjngo" tvg-logo="https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEj023uhTVUZHZCduz2QmzFsxX_wgVLt5UtSOLfGgCG1AV8qyWzggGuwxnBFJLgD6MROpE4rlauT5eEF9Nd0fOOMBgSiA9q1gDhoDOmEMi1uJqr3prx7iQBJp-JYjHWHfvXvd4tc0i1b_fZRXJjAWEofC7JRljqsQJ2he0VD5iSgYO50EoYkLd08nSWljkM/s1600/grj.webp" group-title="CANAIS | FILMES E SERIES",Grjngo
+https://amogonetworx-grjngo-1-eu.plex.wurl.tv/playlist.m3u8
+#EXTINF:-1 tvg-id="Sony One Emoções" tvg-name="Sony One Emoções" tvg-logo="https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEgnIaI61UWq-6IPDefe-FHFyRM9wdz_hWQy8kpcCMzKQqdwqzwp1G5ZTB3HzryWHEDaVYSVmITyvDMIBHHI-g-jTzKRf9oiptXIRJPlht83BwEPFI-5mt9_7hsjEL2ky5EA9hyvYW5_7vkrKK0uuPuCFPfL-SP929dhLXVkyEDqbLsNJ9C_WQCxvs9k5JE/s1600/sonyo.webp" group-title="CANAIS | FILMES E SERIES",Sony One Emoções
+https://f9387554367349db8374885adb2d48cf.mediatailor.us-east-1.amazonaws.com/v1/master/0fb304b2320b25f067414d481a779b77db81760d/Samsung-br_SonyOneEmocoes/playlist.m3u8
+#EXTINF:-1 tvg-id="Sony One Shark Tank Brasil" tvg-name="Sony One Shark Tank Brasil" tvg-logo="https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEgKuE27Zmk9YTEKjc1KFql4xDNmX_gSRXgfjn8fvgxOWtJbAGtNlTE7M8e3JU2gAbszQd9_OhA8il2LmTbqT0iUFuCoJAkG5bBTYVaR1LBHjOer1j3BO5FzncJuL6pZcl79jIN965ft8QUmFMMjP2SfVWNbaz6rXOreWM-bbRomoLEKs4l4Cup4UF2GpKE/s1600/shark.webp" group-title="CANAIS | FILMES E SERIES",Sony One Shark Tank Brasil
+https://f9387554367349db8374885adb2d48cf.mediatailor.us-east-1.amazonaws.com/v1/master/0fb304b2320b25f067414d481a779b77db81760d/Samsung-br_SharkTank/playlist.m3u8
+#EXTINF:-1 tvg-id="Darkflix" tvg-name="Darkflix" tvg-logo="https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEg3uGLtw7LqTnOM4kLWv5cOB5BdOCA-TSYxgO7r8jK4BH5eiAFFeSkBdqGosY7yTdRt6VIqqOTTbKEfwJTKYjbCsHxH2KJY5iXN3p3aMZaJHc0DuDSqt8EKWeKofg6HOxk0wxYBtHEiL_-jUjQnx6SmRlt21D9lbK_hGF1kttMspa3KaiLLtzPjazkuSXI/s1600/DARK_FLIX_-_logo_-_soul_reduzido.png" group-title="CANAIS | FILMES E SERIES",Darkflix
+https://video01.soultv.com.br/darkflix/darkflix/playlist.m3u8
+#EXTINF:-1 tvg-id="MyTime Movie Network - Brasil" tvg-name="MyTime Movie Network - Brasil" tvg-logo="https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEgmVQWAu4rxwFb-FatGMK00nwxpGxGI9Xl6hTU8ghk2aDdV4CcM_gqw3tTx6Ri6tGZyItATnw7Ms1f55qZsC2hUaKxiNHU5ei8NVi_Cwxgkl273EfZRAyOOEPNBQIbdnxX8KRYdOsaK1UYUzLEOX6ozL4XhAtJraLbI9an9WMD0daMpOW5zn8f8NiaP-eI/s1600/mytim.webp" group-title="CANAIS | FILMES E SERIES",MyTime Movie Network - Brasil
+https://appletree-mytime-samsungbrazil.amagi.tv/playlist.m3u8
+#EXTINF:-1 tvg-id="CINE CATÁSTROFE" tvg-name="CINE CATÁSTROFE" tvg-logo="https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEgr4aw6kO6kxidbvIsDfCF8mGtzwZD-ixaGTxn_pamaUITyuH_TTF1FEgLUbDYIKoHE95svPE7vSyuWrN0gcLwUeoX4Otd31N-HgUFhZ7GkcRXUD1SRa87a_U_RB5SJCiJu97fp5qYu5-ezetX_DhxE8DPOYIbdOTGSvxnr2amsZj1kSlyMW5QbSpk2hV8/s1600/cinecastastrofe.png" group-title="CANAIS | FILMES E SERIES",CINE CATÁSTROFE
+https://video05.logicahost.com.br/cinecatastrofe/cinecatastrofe/playlist.m3u8
+#EXTINF:-1 tvg-id="Tv ktv brasil" tvg-name="Tv ktv brasil" tvg-logo="https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEiny5Wopq6cQg8UZDAkjODphdiEeEfvYQ71QPWD2U1EPSbu6dQskbfd_KoPs0HxD7XmO9BVrri0fBIxipOCTmcQFsSsc5aMjM0T4yKRbxkuwkN5icT0CBuwGs_ooMIyvaikSu5QmHKu-kJcr2dNXLBOb5gq8GCONiei7q4JtsQmRhdW-AvChFB42ZkNHUA/s1600/tvktv.png" group-title="CANAIS | FILMES E SERIES",Tv ktv brasil
+https://stmv1.samcast.com.br/paulohenrique5216/paulohenrique5216/playlist.m3u8
+#EXTINF:-1 tvg-id="ORTVWEB" tvg-name="ORTVWEB" tvg-logo="https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEiVobOZEzzxVJFaLFU4MgkZRIbokVBfWPZo_-2SGIpAUKMxLIvQk6vAG2bPWF6xeuikQPCWpDronRNMs5m_4g7E7op1pg2gv1BUrUrHJLcF3BLlwB-F0Gt0Ni59EOX490-jR1FkvMsRD0n4hyphenhyphenjLX56gh0QZDH_OzLY9xBEFNO-NthGTyvjnM_ENhu_wYgg/s1600/orkweb.jpg" group-title="CANAIS | FILMES E SERIES",ORTVWEB
+https://cdn.live.br1.jmvstream.com/webtv/AVJ-17961/playlist/playlist.m3u8
+#EXTINF:-1 tvg-id="MIAMI VICE E CONVIDADOS" tvg-name="MIAMI VICE E CONVIDADOS" tvg-logo="https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEjle0176n0GPBAdSkpQZHNMM6gCZim-hhN8oZ1NRV9IcmY2IavfuITs2gZdTpC-YKbm2NoJnQvxVsPDtql2CAmuJuWeP3ybjnka1TNf2ER9ElA5ipV0fQnPTUXk_iBXoSU0nBxPA3DmSHAyfW9bvP3ScF_wbHWMpDve6_Nth1o8yNI-NWU3XPv9BJHELzo/s1600/miamivice.png" group-title="CANAIS | FILMES E SERIES",MIAMI VICE E CONVIDADOS
+https://video05.logicahost.com.br/miamivice/miamivice/playlist.m3u8
+#EXTINF:-1 tvg-id="TV+NEWS" tvg-name="TV+NEWS" tvg-logo="https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEh1r6jONYp0t8UJrDDOq4cs9g8O-VPyVYDo0aJTe080NiqjcPLHX2CFaN8Etyu4cZewJHbIOm8sbRAb4b2atPyQoobdvd1ZoZ2VSrcFRQdA8YaSkqnw5H0YiM4cQy80qjyzdGX_wi4QEdlwiE9UMn03KCzCG10gMhdud6YG0Czadx6IB9M7qLchqSN9638/s1600/maisnews.jpg" group-title="CANAIS | FILMES E SERIES",TV+NEWS
+https://stmv2.samcast.com.br/adao6116/adao6116/playlist.m3u8
+#EXTINF:-1 tvg-id="Admiradores da 7 Arte" tvg-name="Admiradores da 7 Arte" tvg-logo="https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEhzRE6hVEM-XrLuExAQ-hAqA9vf0sbYa8hXho1_moDt4q6x4LSxlBMuguvgFB3V7Btb3gNDLolzhEoX0ZVvMrqXIL1Y0ijzKBUnNsRdCQ57SuMBDQ1hYFVbn9A_c19ICKRtwUfees6muQfozHUCQ_sViPVA-e99d6dmwv5AnL4lnP_cDU2P8qc3pwbJ6Ys/s1600/admdasarte.jpeg" group-title="CANAIS | FILMES E SERIES",Admiradores da 7 Arte
+https://s1.tvr.ovh/admiradoresda7arte/admiradoresda7arte/playlist.m3u8
+#EXTINF:-1 tvg-id="tv cidade brasil" tvg-name="tv cidade brasil" tvg-logo="https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEgG7ZPbAXUZRBoC4CUCZ7nbKyrFBBgbr_ykY-Gf9118cl8U0VfEplsEoEXF7jdPrD7hIosTwsGyEKu8uN5rW6HMBp6JN0z2cqT2N5DUcmM531MP2tKRirUEAL0IpOXu7sO86AHYtKesHRbJ_icJK3Ro7VUFTJZBnN3WwU8ipvhN1L2NWvLer174BnE0f5I/s1600/tvcidadebr.png" group-title="CANAIS | FILMES E SERIES",tv cidade brasil
+https://stmv2.samcast.com.br/tvcidadebrasil/tvcidadebrasil/playlist.m3u8
+#EXTINF:-1 tvg-id="Tvcei" tvg-name="Tvcei" tvg-logo="https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEjvvNaZUduMUxl2fpI9wZlu2d-NMJ1ueTdv0c1gss4gW1WfAg33xIMERzDMQoGRniNbLuBEjS33vmTspfjf3018Gp_wQIQkM2GjzzelQJI6dC36mvi5OtqlJvUjd7ZujUSUuYisPK17nHmJ8Yu7P36Fmug5-E22pic4NB5eWcQ-WbcauLuSuRUNjtji6Og/s1600/tvcei.png" group-title="CANAIS | FILMES E SERIES",Tvcei
+https://stmv1.voxplayer.com.br/smytv/smytv/playlist.m3u8
+#EXTINF:-1 tvg-id="Tv Explosãofm" tvg-name="Tv Explosãofm" tvg-logo="https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEiE3k1GSqLHVEvGJGJ5MsRBK5PplDwF0nQ9DvCrEhyphenhyphenirWGr8RciLEwOHFSt7-98g08QnRes-Jy79KNtpLosQAWd31m13VKXyc_fUfhMyz1fPeE9ttUwao_N-ErynFgTIFy_Midz3XpxYs4_SdOT7DrH0ZeVZPmGanm35Qa7UUfjrFqzzKbGuH95cdCGvoc/s1600/explosaofm.png" group-title="CANAIS | FILMES E SERIES",Tv Explosãofm
+https://stmv1.liveplushd.com.br/tvexplosaofm/tvexplosaofm/playlist.m3u8
+#EXTINF:-1 tvg-id="TV DIFUSÃO" tvg-name="TV DIFUSÃO" tvg-logo="https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEg_zj-49AILxG0DDEENFy7qzsOXZ1um85_gSSVef2zFu8qL4kDpIWWys_QWcalRFCd9BXzvtI-HjSIN3MHKs-F7I69vQfziv8jWlhiROh6nRhsU1OE03p84Zayi_sd0UFECZZI2uqHfkOH9DjSkH2PUt5pzMv7R0u0r5hneIbPlb1QoIajaM7o8ATyxh9U/s1600/tvdifusao.png" group-title="CANAIS | FILMES E SERIES",TV DIFUSÃO
+https://tvdsite.redesuatv.com.br/tvdsite/tvdsite.stream/playlist.m3u8
+#EXTINF:-1 tvg-id="TV Sonata" tvg-name="TV Sonata" tvg-logo="https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEgsk-vo2cWhbTWHaAJuFtZTrzmEm3ByEiRjNL4BzBBrPGN6-TXXHtHoCvCe9pGeL5qxOw2zhJBGDNPLEICzJmJ5w-RVZYbZp4tsFUzHUCQ7dhY61kVRNJlSn99uFhKHYQgvzlhtB6GGxUb4ota-R2McCc_yGU8-dAaB_Ta_XBdsntaQgoGHm-UOzt9l16Q/s1600/tvsonata.png" group-title="CANAIS | FILMES E SERIES",TV Sonata
+https://video04.logicahost.com.br/isonata/isonata/playlist.m3u8
+#EXTINF:-1 tvg-id="TOP MIX TV 04" tvg-name="TOP MIX TV 04" tvg-logo="https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEjGwe8YDXP2CiVWzdKIkX8zAd9OrH99irCQk6xnlHGxSBRMKCqT0LWXYpZX4HGJXptACbWbYm3VXK9Im_RwZxjbr2vRGhlmyJx3fPyP6LD0ybrpO9wvyTVQjQ2ndVHv0kUxedKzT567cyMjx_elwAjughfS03VgqeIza-GOaLGkRr6HtqmFXpMEKOgx0BU/s1600/topmix04.png" group-title="CANAIS | FILMES E SERIES",TOP MIX TV 04
+https://video01.logicahost.com.br/topmixtvfilmes/topmixtvfilmes/playlist.m3u8
+#EXTINF:-1 tvg-id="CANAL SÉRIES CLASSIC" tvg-name="CANAL SÉRIES CLASSIC" tvg-logo="https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEjbIwQBtmi6eePBMt3pBaIM-kJjNxkx-8JuVpcQpe65gCK24aACDt4qj5n4J4gC7jvxL5meUc0elzmc-2Xbe28I_EtbUqv4fkW84Ah6EiC6GuGRIAXKYSEvf68q7avs42zPjTvg6lF8pgobKqc8HBvKRM-K8Gll8QZpBBPHT9W20ighoz1pMEHZffxz5rc/s1600/seriesclassic.png" group-title="CANAIS | FILMES E SERIES",CANAL SÉRIES CLASSIC
+https://video10.logicahost.com.br/serieclassic/serieclassic/playlist.m3u8
+#EXTINF:-1 tvg-id="TV MZ" tvg-name="TV MZ" tvg-logo="https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEibKLVxUjCtOd91oOX63t3yD0Ob8cul8m1nvqPH3aKMJqjotYrWL5RbsK8sp8uLRQwtSfUxGfKHKItL5zFUJiCeCBbkNoUR6JJgg0Eb8IJqoWiiJ2EA5nBM-DAD8yVckI0hBYrolNG8vmG1jPFdqH0X_Bzufyw1BH54Lx6Sgw02dwmoQIJHrXarbw417zQ/s1600/tvmz.png" group-title="CANAIS | FILMES E SERIES",TV MZ
+https://stmv4.voxtvhd.com.br/tvmz/tvmz/playlist.m3u8
+#EXTINF:-1 tvg-id="NBX TV" tvg-name="NBX TV" tvg-logo="https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEjI2RympKeY3SJHAzqWovIl3I164ZC0apGwLH6hAYZcEXwlpxxjFqNFmJe1m7tKwO7A-qPdyQ4QX4VGSW2-v_Vjs_X-ZzSnCvB6J8jNVE4DpygBZQFf_qzXQtkPoQUKeSIapzel4l6LDEC023mMS39qsuqn5_nB2JG2XxfAtaK2F88bIPwZGF4EhW0f7HI/s1600/nbxtv.png" group-title="CANAIS | FILMES E SERIES",NBX TV
+https://stmv7.voxtvhd.com.br/nbxtv/nbxtv/playlist.m3u8
+#EXTINF:-1 tvg-id="NBX TV PIPOCA" tvg-name="NBX TV PIPOCA" tvg-logo="https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEhAqufrbg4H28Hhu_d8nTJ70eQnL9Ozg73mS3dAx4DqH1VzXUeWhLIFn-oaxYFKhNqjd55ecwEPAGF5Y5Swv7cYeOnBkJHMsLbLRmbOjNxCQAhGbGP-a0I_G9mI5allXxSEJya5Yhsrv0AgEnAsWEq8p8h2B1ikaEzUUNlCC7z1rzNZ1Q0sZj071yDb8pg/s1600/nbxpipoca.png" group-title="CANAIS | FILMES E SERIES",NBX TV PIPOCA
+https://stmv4.voxtvhd.com.br/nbxpipoca/nbxpipoca/playlist.m3u8
+#EXTINF:-1 tvg-id="Jetsons Tv" tvg-name="Jetsons Tv" tvg-logo="https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEizVK29BJOHcffLLSOTgKDv7oP7djM2OOPk0oEbWtWE3rkOtP97IvN32n6UGKYnvfDoRBGYEV3OdkzvxhBZgvAADltXMYWkNiP0qbpQ5xmXTk838vAv662YzHN8T43tBRV6jBCL4ggkXTu06Cht0k0uMj6KWNWQNP1Uows6o34o0V1dt-11iKWXXX3P844/s1600/jet.webp" group-title="CANAIS | DESENHOS",Jetsons Tv
+https://stmv1.srvif.com/jetsontv/jetsontv/playlist.m3u8
+#EXTINF:-1 tvg-id="Gospel Cartoon" tvg-name="Gospel Cartoon" tvg-logo="https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEixGRsCFGdw-zzVSX39Syu-tOFT2SBqfbIAoi6RtotCvHMAoIxytzDjcxnqk-54DiqXATl4vcOzgmMP4MD2wrF_wgBj4iCgwNF3xX65MoeICX0Xmksi5S9kik6fF1wpWCpqkscfLB8w9He80dlmHto3_he4TTaZeBGP0QiV3_V-D9z3hc7ydPuUuvtUqAQ/s1600/gos.webp" group-title="CANAIS | DESENHOS",Gospel Cartoon
+https://stmv1.srvif.com/gospelcartoon/gospelcartoon/playlist.m3u8
+#EXTINF:-1 tvg-id="TV Kidmais" tvg-name="TV Kidmais" tvg-logo="https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEhU4C7aOac7AsxwkQJOL-yj6YdEe2JvQFPwgoPvQXRKuQdk84h-O-X8OpIlScpTMkA016qBTCpfTIVWWiOm5qMkpTtG7n8nVsu328X1NnXrruwgsFtCqSB81HBzEWGNUj2aMsibK9nyVt8RdVRIk1_4OM1EmEEAqc1Tb4Tuermov27V17u0SB68pgcxcOg/s1600/tvkidmais.png" group-title="CANAIS | DESENHOS",TV Kidmais
+https://stmv1.transmissaodigital.com/tvkidmais/tvkidmais/playlist.m3u8
+#EXTINF:-1 tvg-id="Tv Nilcera" tvg-name="Tv Nilcera" tvg-logo="https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEjthev0Nwua5rexLNBSg6hluUt5plOrv2a4HtgN7n_FyX3bGm17wTkd9rt6hBXB7XWR3Rid7Os8wLHYNfjiTWEJPxKUUPLo_JeZ4HUNS996MPg9V80StLLLXIB68QcnBNHjnH0EhEPjr38Brt7RcfucHW3Ka3Q8Ec4u9fyEivUHvMsHDqmjJPFRdKt0oBE/s1600/tvnilcera.jpg" group-title="CANAIS | DESENHOS",Tv Nilcera
+https://live20.bozztv.com/akamaissh101/ssh101/tvnilcera/playlist.m3u8
+#EXTINF:-1 tvg-id="Fox Kids" tvg-name="Fox Kids" tvg-logo="https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEjzPMSj0CIUdwViQvfoHCh1eV9sDxDJkZud88cVU8mXob8toh-XerdErUJ5rSXNNFWM9_7_qJvOlZY8cdHJ2BTWOCvc8uT5bAWaaYoAf7IODte8tjkkH1Z8UQQc1B8otha0v_78QpZzL1Wa3RoTstC_QnwDjJeK-48-RKGNlD1pv0S_Bwh8KWEtTpILFuQ/s1600/fox-kids-network.jpg" group-title="CANAIS | DESENHOS",Fox Kids
+https://stmv2.srvif.com/emlsilva/emlsilva/playlist.m3u8
+#EXTINF:-1 tvg-id="Jetix" tvg-name="Jetix" tvg-logo="https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEhvsm8f0WNuMwcSssDogmSiaci6yMQt882T_AlC7bU94I4fbDk40x4s0pcrO1_9ipidQDt1n0gDYuEFCsr5jYwTfk5b29VXkWkc3FNgiz3NELI_uBM8YaTFa8SV_4FzbpDlJApCxFBZXCQHtFhBOYH6AAbXSsSQugb-OjNKqn-tAql7-I-yz-tc8WlgbZY/s1600/jetix-logo.jpg" group-title="CANAIS | DESENHOS",Jetix
+https://s1.tvr.ovh/jetix/jetix/playlist.m3u8
+#EXTINF:-1 tvg-id="Nicktoons" tvg-name="Nicktoons" tvg-logo="https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEhJwe6wPgiTOIDvPYUCX-S2qD6cuYh7DYrzQwQGiGAafWDy7msQcpjfbBc7P4KyuwA-OeRvGO3c1KEJ47_eD-_k-hw_SLW84J3yzRvjB5BnkurXUHgRR5Qy7Nf9Slqi3jKEAIjKfLnmtimXuY_AxG26GlePiY4ZW93PRbRCmj9JikYrM_J0g1JyQBMEtLk/s1600/nicktoons.jpg" group-title="CANAIS | DESENHOS",Nicktoons
+https://stmv2.srvif.com/nicktoons/nicktoons/playlist.m3u8
+#EXTINF:-1 tvg-id="NBX TV KIDS" tvg-name="NBX TV KIDS" tvg-logo="https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEjjmKfXFM9CROvEdOV7sB89qUvaFHtX75yeoMKXaH5U4XxjH3_0ZM5leJy2ezbkpEdTa3Eb8pNxDXzo-7ahH8FuWIk0fMnMGNXWzeTwq5JTGQqvNyi19XKq8zDp37TBie2yyqmzMrjliHHekJh2NUDOjYfPTeHraqO7WlatKomqS7ZEzqJ8WBQO4s0C8wE/s1600/nbxtvkids.png" group-title="CANAIS | DESENHOS",NBX TV KIDS
+https://stmv4.voxtvhd.com.br/bnxkids/bnxkids/playlist.m3u8
+#EXTINF:-1 tvg-id="Novelissima BR" tvg-name="Novelissima BR" tvg-logo="https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEi3nYAE74nXl-oQtyefKStRaOlvgaf2tBSaT8UKQsKhvi-58JvaFxZ9FwKBwjCUfnqJo7fK7VoBP_luvt28Ucq-diFbfqMcm-4arrTDEJJuxCwbl8vc9UAs0v6QtAdSVx-659jbXTrNZuLF1LDcAUQTtu2J7MRV62OICOPsVAN-jwHxzetN7WtZsmaPOUA/s1600/novelissimaa.png" group-title="Canais | NOVELAS",Novelissima BR
+https://cis-no-samsung.otteravision.com/cis/no/no_h265.m3u8
+#EXTINF:-1 tvg-id="Acesso Brasil TV" tvg-name="Acesso Brasil TV" tvg-logo="https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEg0SGoHCtkl-OA0Ip4HBPOEU1m5VAB5Q3CIc9TJfXVDYgkRxHKk_hql2Dxfcw8Z6CC01DGXFpIzGVt_8fEzYDoHrES2pfOn8QRWPxn6kE7HR5FTsDlOSqKMlcyn_fvv-rm9naHlZ0F71oZga7z748sW0JVSaJtQRN0jDhgW6TV3Gu6n4qdDQG9bsxVKhOo/s1600/acessobr.jpg" group-title="Canais | NOVELAS",Acesso Brasil TV
+https://s1.tvr.ovh/acessobrasiltv/acessobrasiltv/playlist.m3u8
+#EXTINF:-1 tvg-id="Tv Maná Brasil" tvg-name="Tv Maná Brasil" tvg-logo="https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEhhbe7hqNgRsmkwkSMPOviaiXaNEECpwJxFLPGYa-85_485MaaK4tRaAn8O2mf0qyUxaQEzQf6IdvhubiathN41f6Gxrjzk4px3Nz6a_8lwmFoB4Kxw3gJkZW1bfk_BpxKN4zcPNTM8xp6wNe8OXwO3K1SxJhHRzX2cjBSB_b3eY3DgwBWuf81_MMBUvL4/s1600/mana.webp" group-title="CANAIS | EVANGÉLICOS",Tv Maná Brasil
+https://w1.manasat.com/tvmana-brasil/smil:tvmana-brasil.smil/playlist.m3u8
+#EXTINF:-1 tvg-id="TV Novo Tempo" tvg-name="TV Novo Tempo" tvg-logo="https://1.bp.blogspot.com/-BOo1fU0eDaU/YUHcElt9WfI/AAAAAAAABFg/3csTmAn2ji0exjLHHqor1yyC5JluA4X3ACLcBGAsYHQ/s203/novotempo200.jpg" group-title="CANAIS | EVANGÉLICOS",TV Novo Tempo
+https://stream.live.novotempo.com/tv/smil:tvnovotempo.smil/playlist.m3u8?JPFILMES
+#EXTINF:-1 tvg-id="RIT TV" tvg-name="RIT TV" tvg-logo="https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEhfe3ApDSwVx6sArdr2zASfa4X8huE_QNk23C_rYCJj9gRE4aRkynHjJzm7xC-QAr71mhS4yYaQduEtNABWLGzBs73Aq8d3WONQXoYiSLnmxI26Ftb7um7ybepgkhZp5NC2S3xljzPvLnY4FYjkl9FCjpEO-NBAGxpAnZb-apz_ql1ypLwWdJ3S6qGVKCg/s1600/RIT.webp" group-title="CANAIS | EVANGÉLICOS",RIT TV
+https://acesso.ecast.site:3648/live/ritlive.m3u8
+#EXTINF:-1 tvg-id="TV Universal" tvg-name="TV Universal" tvg-logo="https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEgnT8jhcV0H1o5V6r7F1WBosziEWkDEymHEkmJ8gh_O18anAkurlzuZDcyr1B-LeJu3oFYbw3ybdn9t0bJG0f2-vkF0F2j-PwmnfGx2z-Sa7y5a6VfJuUQWS2UemLKy76G8HxYYjd71VctNFW9M0GCSDxtKryV6NbNisVah6HZscdvyfGpIZL7UXU7vrjI/s1600/univ.webp" group-title="CANAIS | EVANGÉLICOS",TV Universal
+https://644398c.ha.azioncdn.net/primary/tvuniversal_480p.sdp/playlist.m3u8
+#EXTINF:-1 tvg-id="TV Igreja Mundial do Poder de Deus" tvg-name="TV Igreja Mundial do Poder de Deus" tvg-logo="https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEh-fJfONVNuLVdd3h8rMKXAl1S1NOliJJcy0oI4eiW-9Y1EmCZEJlWb1q3ZUcDlnEM6e8BGgt7bCZTWym_7nYBo5uIvlmi1QNFqMs23Vi31JqIZPdsaVKthcgKg-2AzS2WgWUX3L7FVfRYrq6QlK6y9XbLBTlWcGBVm0-hwNRscDaK_OzI9oOKUXOMIMjY/s1600/igrmundialdepoderdedeus.jpg" group-title="CANAIS | EVANGÉLICOS",TV Igreja Mundial do Poder de Deus
+https://stmv7.voxtvhd.com.br/pralan/pralan/playlist.m3u8
+#EXTINF:-1 tvg-id="Rede Mais Família" tvg-name="Rede Mais Família" tvg-logo="https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEjPUmA6gsm1McxxHpUAUlPbm0DG1G5cb82Vgn_Um94w3n18hP8wTafwLvfxnaJ1_t3yKupK9C9CVVFFPLVajyDf9sRmMJbNsStGvA8AQy4i5yeJB9j94v_geGq07KVBjptNGOh_FPCfEj5qnznYhtY0eeEbQY9l6WtB_2eFO6ksMlJJx1gUQduCT4WLzq4/s1600/maisf.webp" group-title="CANAIS | EVANGÉLICOS",Rede Mais Família
+https://video09.logicahost.com.br/redefamilia/redefamilia/playlist.m3u8
+#EXTINF:-1 tvg-id="Top Gospel FM" tvg-name="Top Gospel FM" tvg-logo="https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEggN5CsnU9tO-vDYgVeFMLTNIK61tCKax1hK6HCgG6kwDvtMCayoMg3XCKxImfCecYmpwiBGUdSi3dqFOV-LBY1bryrAKapNjCPteVTLM4gNM_cpwhgGd7NjQFtpSeyod5L-iqYxTxsUrTPYOErDJh3fBcOKSKK19C1vsELZGl97hRm4rU2TLZBRJfhE5Y/s1600/topgospel.jpg" group-title="CANAIS | EVANGÉLICOS",Top Gospel FM
+https://a.cdni.live/topgospelfm/topgospelfm/playlist.m3u8
+#EXTINF:-1 tvg-id="Acesso Gospel" tvg-name="Acesso Gospel" tvg-logo="https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEgTrfZwDD3t-npZX5_dCKE8tlp-Yp15RD5pAFnaSuOzB-djxypvJ3liAekyFCPB_-7AKjxzrCLZe4_9FEn6IrR6XiX-DIOz6lcMREYTyWwjvoqz2l6j52DSlFx0qyev6GoSRNzPH8ZS-oAm54vBryVg5RU0AVQGwDvVjrXGb4LyQjsJ5199-yKxsqiWXaY/s1600/acessogsop.jpg" group-title="CANAIS | EVANGÉLICOS",Acesso Gospel
+https://s1.tvr.ovh/acessogospel/acessogospel/playlist.m3u8
+#EXTINF:-1 tvg-id="TV ADORADOR GOSPEL" tvg-name="TV ADORADOR GOSPEL" tvg-logo="https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEja63_CYLIawlVl1UT7zwBs_AjtESch-fx6djRqnO5DdLCCUFRxzX_PtLWNrJlZhfog55_lMdo01ePCChjQH27InWyaEzNMMpe4YdCoL9foYSWzAvi67NTZhpiEmJjw5rls5sa78rckPXZ8gGKC-bByerOpG1GhG9G9CIS5WQTnm7hk4u9qwDbs5eATt8A/s1600/adoragospel.png" group-title="CANAIS | EVANGÉLICOS",TV ADORADOR GOSPEL
+https://stmv1.voxtvhd.com.br/tvadoradorgospel/tvadoradorgospel/playlist.m3u8
+#EXTINF:-1 tvg-id="TV Itapetinga" tvg-name="TV Itapetinga" tvg-logo="https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEg2hvUaChSwPUtgxTzVbXTEmC6xLP0xERku77JAJn4q1WyRKKtqPZ1G7iKXWRJTkwxxcOlRzR13Bl8ra6x80qD1yxdoKogjl1JpAczM31tBIpzRAFvr7Kh-NxFtCSIXfr4QrxYmMbAhWCkJSY1M4rbtjVkhytnqxO_ArQLDYfHcKMhdfK33HoS557heXSw/s1600/tvitapetinga.png" group-title="CANAIS | EVANGÉLICOS",TV Itapetinga
+https://Stmv1.samcast.com.br/eroaldo15634/eroaldo15634/playlist.m3u8
+#EXTINF:-1 tvg-id="TOP MIX TV 03" tvg-name="TOP MIX TV 03" tvg-logo="https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEgROwJtsLHOUwlEU4rZyusEKhSHmAPOEwdMdpOhBDvFS4w4CQtlPP91SOcYa7eS2JSv5Qyjppd8VGkqWBvlsv7ZdYzHPVaY4cyv1O7otBix8KDcxtrYSk9MFUewmML_jf0zBEHSnzHwp5uTiETniFEAB1y6r2iwuu73K62UQrb6wZrX8RWs0wG25Dc6F1E/s1600/topomix3.png" group-title="CANAIS | EVANGÉLICOS",TOP MIX TV 03
+https://video01.logicahost.com.br/topmixtvgospelcanal03/topmixtvgospelcanal03/playlist.m3u8
+#EXTINF:-1 tvg-id="TOP MIX TV 02" tvg-name="TOP MIX TV 02" tvg-logo="https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEiX1uuBtz2guhOPk-U5nAorMXfMqRRt5w5x9KcVhbljtJGyIzbbhmlYwn_d1Q9_m8lZI4607EfI2yX1wOYTWBHyda-MB5GVPGDaXy9UYnNmQVxiJRnBbITNGwBhnHfusTfbIKynZJ3iyBk16-dklRsWUPMEY7Yqcxy5F2OSDwK2TrSM8RrO05d3PJIII4Y/s1600/topmix02.png" group-title="CANAIS | EVANGÉLICOS",TOP MIX TV 02
+https://video01.logicahost.com.br/topmixtvgospel01/topmixtvgospel01/playlist.m3u8
+#EXTINF:-1 tvg-id="Viva Vida TV" tvg-name="Viva Vida TV" tvg-logo="https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEhOcl0uIWAIWKJbxBmYdVK-HhLqH3dVppWB7A9L9cbyObBp_DwjOWp7v6pQHtcNljM6k17FLYU5Gse8o7ARzZUk6yOJB4Y2Ah1U-evwGTUeu9gLrDlpUQ4dB8AcI4NglhRMxFs1a7S0s7gu1ksFSVZYVTuMqZQxzGVc8gUj1AO0rnjdLcZKW6vh0fDJZaE/s1600/vivavidatv.png" group-title="CANAIS | EVANGÉLICOS",Viva Vida TV
+https://stmv1.srvif.com/vivavida/vivavida/playlist.m3u8
+#EXTINF:-1 tvg-id="Tv Adorando Jesus" tvg-name="Tv Adorando Jesus" tvg-logo="https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEgJoVOI6q-k4VVBpurbQjvRrjWADBaOc1eHvE1UCK8yDzqKiJu4F4LpG46Ai-bm8mXQsbOtEEX0RDzMXSWq1NO_tMrFF-r3RhnjP7veYactIDu2XfuTCpsTYIhZS3xT3r_4RH0khis1new0P936N4UW5deacfm3ditg7v4gPgYRvmm6270BsDVXWq6jVXs/s1600/tvadoradoresdj.jpg" group-title="CANAIS | EVANGÉLICOS",Tv Adorando Jesus
+https://stmv1.srvif.com/tvadorando/tvadorando/playlist.m3u8
+#EXTINF:-1 tvg-id="TV Manancial" tvg-name="TV Manancial" tvg-logo="https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEhBbeky7kUIyTNfsapUKQZxdCvCwh7A8yCRAu3Ckhnm9NFaVnDorhhYWAv2xFPPV-tPD1aI_oCYMKXuvNMcs2WCcgipnnboZJg0Tdd0egmjpcAXUdJpipfRhxeUnNIzqgyE4moVVONhAyp5sY4pZMKOxUJtLH9GfJC3QGdeJkimn6N1c8NAJbsyJ5bGdZE/s1600/tvmanancial.png" group-title="CANAIS | EVANGÉLICOS",TV Manancial
+https://srv4.zcast.com.br/flavio8792/flavio8792/playlist.m3u8
+#EXTINF:-1 tvg-id="Tv Luz Do Mundo" tvg-name="Tv Luz Do Mundo" tvg-logo="https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEhuc3ddRjWqXDuvgabi2DM_6560c9K0F1AqGFP-LuxosVwrhBtCMnBlBQ8nfBVQQS6wqq6hKCarTRqthrhPbRF4jCbBmb0W4BM72AWWzO6rhQS4H16JKY4ftIAga3xryk7AbE46ke5NlZEtMDnK96lveWAamZ0hZn5pqyhVCarW4WmPzy1Ggu4SHhN3dl4/s1600/tvluzdomundo.jpg" group-title="CANAIS | EVANGÉLICOS",Tv Luz Do Mundo
+https://stmv7.voxtvhd.com.br/tvluzdomundo/tvluzdomundo/playlist.m3u8
+#EXTINF:-1 tvg-id="TV CONEXÃO CELESTIAL" tvg-name="TV CONEXÃO CELESTIAL" tvg-logo="https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEhb5XqU2ZWVMGdW2B_-zR6j6CFZlVKOPSwEcuVqmJ_BG7nW1DJ9lOmUS0xLvyPgnLeoSsY0FjpPAnAkYgW4v8CeOAW8lIN7A9RXwniXrL5ry6-AE1wsa2uqJCvdDXZ_qnpys3PYtchQjo5iUBwX6R-3s4TQrx31UlMcQcE64UkSZTMRR6OWcW-7OrK0SMg/s1600/conexaocelestial.png" group-title="CANAIS | EVANGÉLICOS",TV CONEXÃO CELESTIAL
+https://stmv7.voxtvhd.com.br/tvconexaocelestial/tvconexaocelestial/playlist.m3u8
+#EXTINF:-1 tvg-id="TV DO POVO ERECHIM" tvg-name="TV DO POVO ERECHIM" tvg-logo="https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEgQ2YPAXGT_xx0PbaWk4OrlV38k7piTOHwjWXuL-H0M4v5GUxEDm_mZ9DzOYLnxePISVKoqXElQhiGA4lYBMzV4nBGqmM2iikAoMEheiCBhSLzdrarzjg5BkE4rSbZmQgZaXqNioFhV9o-QWMs-YjS84_AmXx1__PX-tX4QWCzMnMBWXHtqiivH6bGwEeg/s1600/tvdopovoerechin.png" group-title="CANAIS | EVANGÉLICOS",TV DO POVO ERECHIM
+https://stmv7.voxtvhd.com.br/tvdopovo/tvdopovo/playlist.m3u8
+#EXTINF:-1 tvg-id="TV CESP" tvg-name="TV CESP" tvg-logo="https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEgnQv_9sQNndYGaZhOIxPWTbOnyrjHgEJ3Vc2J5rpDRY6pDwzZZlSgXoutnaYFVW52TOv-4TvB9UqMVrCzKPlOTL6Jv3Zw8ySNgypb48Cxl3phV6FTCaFcedqnASLhKuHmY9yzkudaP5sK_pDpUIY4xo0EOy3xk-VlqdavQI0GEoss4-pm6w0DNZh2bT6s/s1600/tvcesp.png" group-title="CANAIS | EVANGÉLICOS",TV CESP
+https://stmv7.voxtvhd.com.br/pralan/pralan/playlist.m3u8
+#EXTINF:-1 tvg-id="REDE GOSPEL" tvg-name="REDE GOSPEL" tvg-logo="https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEgSBxez_hthyphenhyphenRdwFLmdTQcqDq44HohsekC9gsqcRsYRNdwy2b7AIqLnp0hHfjQ1letiWwhIZY_mPk7kvfbNj-hmXcqBoSX5TmfG1KvHMJTkQRhBLEatF7imegYhTynaALzE0bSFu4Hq3lpv-rPJ52WKQ_hxOFb0VM7k2r3775211-lvtUoUdORaIC7kNvo/s1600/redegospel.png" group-title="CANAIS | EVANGÉLICOS",REDE GOSPEL
+https://redegospel-aovivo.nuvemplay.live/hls/stream.m3u8
+#EXTINF:-1 tvg-id="ALMA GOSPEL" tvg-name="ALMA GOSPEL" tvg-logo="https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEjMpHG0BwKPBOm9OKKs4cuXsKJbOudEfsI9gjWsz8F1HberiMmvI8klSUuTBnjkx49WooWVHqigmPp2tu8S5wrtvJJMweuFVPldt6x_A6WR1ZjEeZMNM52SskQwdvC15vUeNWUEnwFhFUWDwYmSD1kaCQmwfUdJJJSEIEo5-p941-V4d8R2QH1dLRudc_Y/s1600/almagospel.png" group-title="CANAIS | EVANGÉLICOS",ALMA GOSPEL
+https://almagospel.nuvemplay.live/hls/stream.m3u8
+#EXTINF:-1 tvg-id="TV SEPIOL" tvg-name="TV SEPIOL" tvg-logo="https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEjoqDXEpRDAW2EhSPbYrLbrq7SXvlNmEuSNPnNRAdIcb-ZHK_95B5lwXZFcI9z61rwV-4DkEYXeVUacysY9dzIvfv_rqWZPiRN3fVoVOprrDDH2PNRM26_AjI0HroHm8IDP9hqQ7DE22dpOOmBsKpMdu_FHUD_SmgF1iPy_CuUew6F0yIuxn8SzqK60KI8/s1600/tvsepiol.png" group-title="CANAIS | EVANGÉLICOS",TV SEPIOL
+https://5a57bda70564a.streamlock.net/tvsepiol/tvsepiol.sdp/playlist.m3u8
+#EXTINF:-1 tvg-id="TV Brasil Angola" tvg-name="TV Brasil Angola" tvg-logo="https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEg2_CWfOSSg3Wa61WY5Mj_ugaYADOgL6HlXdgm92983obNNd6pM3pb5rvPdV-C9yb1E67rCH89RIh8QTwRNJ3mXOC3Da9PA9D3S6GrnTWytkdOS86CvJ5o_V_TA-kHbmsXChyDMyf5aYiYb9Rcf6mcxq3mv8EPaO64JgA9SVsNPii9v0Jjkt79OwLX_2WQ/s1600/tvbrasilangoia.png" group-title="CANAIS | EVANGÉLICOS",TV Brasil Angola
+https://video10.logicahost.com.br/tvbrasilangola/tvbrasilangola/playlist.m3u8
+#EXTINF:-1 tvg-id="TV IMJC" tvg-name="TV IMJC" tvg-logo="https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEjUnHcgNFulfRpAN9gV3SZxvTy2Uspha8chchvapnE69_5Y1UPV0uroo5NJyk-eUIU9A0MixSXdFojBNAmkkaYAufYwk3dl5pGM_p88TWPqSz1r_zFHn0WGqpsHmTCbPRo7Mz1Hb94w7G_uWyIoQDtYqMpckkTeGI6QTpjrAl0nP3PVFRCbB9WFLvP0CHs/s1600/tvimjc.png" group-title="CANAIS | EVANGÉLICOS",TV IMJC
+https://stmv7.voxtvhd.com.br/tvimjc/tvimjc/playlist.m3u8
+#EXTINF:-1 tvg-logo="https://www.xtremetv.com.br/public/slider/50156-2026-01-22.jpg" group-title="CANAIS",Xtreme TV 54
+https://stmv.webtvninjas.com.br/xtremetv54/xtremetv54/playlist.m3u8
+#EXTINF:-1 tvg-id="TV LIBERDADE BETEL" tvg-name="TV LIBERDADE BETEL" tvg-logo="https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEgdFU0PJHeowjnRKQ2f6wU5-ziWnTybBFRR1Xky8GXGlARzZWOq8EMwy8cGxDqhVcG3GdeeWNtqxcr2Gy0BPWijAfpQVaPGdUBw1mSCmKPcADBDux-i5xf3JcrAkT1QvIZEMaq3nveXXWDGWFhph-HrwoQjfNJSkVTHr8YL6wK_kRSIjsN2LOo4evHR_5w/s1600/liberdadedebetel.png" group-title="CANAIS | EVANGÉLICOS",TV LIBERDADE BETEL
+https://stmv7.voxtvhd.com.br/liberdadebetel/liberdadebetel/playlist.m3u8
+`;
+
+        function parseM3U(data) {
+            const lines = data.split('\n');
+            const canais = [];
+            let atual = null;
+
+            lines.forEach(line => {
+                line = line.trim();
+                if (line.startsWith('#EXTINF:')) {
+                    const nome = line.split(',')[1] || "Canal Desconhecido";
+                    const logo = line.match(/tvg-logo="([^"]+)"/)?.[1] || "";
+                    let grupo = line.match(/group-title="([^"]+)"/)?.[1] || "Geral";
+                    
+                    grupo = grupo.replace("CANAIS | ", "").replace("Canais | ", "");
+                    atual = { nome, logo, grupo };
+                } else if (line.startsWith('http')) {
+                    if (atual) {
+                        atual.url = line;
+                        canais.push(atual);
+                        atual = null;
+                    }
+                }
+            });
+            return canais;
+        }
+
+        const canais = parseM3U(m3u);
+        const canaisArray = canais; 
+        const cardsElements = [];
+        const fragment = document.createDocumentFragment();
+
+        let primeiroCanal = null;
+        let primeiroElemento = null;
+
+        canais.forEach((canal, index) => {
+            const card = document.createElement('div');
+            card.className = 'roleta-card';
+            card.innerHTML = `
+                <img src="${canal.logo}" loading="lazy" onerror="this.src='https://via.placeholder.com/80?text=TV'">
+                <div class="roleta-card-name">${canal.nome}</div>
+            `;
+
+            card.onclick = () => tocar(canal, card, index);
+            fragment.appendChild(card);
+            cardsElements.push(card);
+
+            if (!primeiroCanal) {
+                primeiroCanal = canal;
+                primeiroElemento = card;
+                currentIndex = index;
+            }
+        });
+
+        roletaContainer.appendChild(fragment);
+
+        if (primeiroCanal) {
+            tocar(primeiroCanal, primeiroElemento, 0);
+        }
+
+        window.addEventListener('load', () => {
+            roletaContainer.focus();
+            showUI(); // Já inicia mostrando a interface
+        });
+
+        window.addEventListener('keydown', (e) => {
+            if (canais.length === 0) return;
+
+            showUI(); // Acende a barra sempre que apertar qualquer tecla
+
+            if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+                e.preventDefault();
+                currentIndex = (currentIndex + 1) % canais.length;
+                tocar(canais[currentIndex], cardsElements[currentIndex], currentIndex);
+            } 
+            else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+                e.preventDefault();
+                currentIndex = (currentIndex - 1 + canais.length) % canais.length;
+                tocar(canais[currentIndex], cardsElements[currentIndex], currentIndex);
+            }
+            else if (e.key === 'Enter') {
+                e.preventDefault();
+                tocar(canais[currentIndex], cardsElements[currentIndex], currentIndex);
+            }
+        });
+
+        startAntiStall();
+    </script>
+</body>
+</html>
