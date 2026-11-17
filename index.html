@@ -287,7 +287,7 @@
         const playerChannelName = document.getElementById('player-channel-name');
         const playerChannelGroup = document.getElementById('player-channel-group');
 
-        let hls;
+        let hls = null;
         let currentUrl = "";
         let lastTime = 0;
         let stallCount = 0;
@@ -322,7 +322,6 @@
                     elem.msRequestFullscreen();
                 }
             }
-            // Remove o ouvinte inicial após o primeiro toque para não atrapalhar
             window.removeEventListener('click', ativarTelaCheiaInicial);
             window.removeEventListener('keydown', ativarTelaCheiaInicial);
         }
@@ -363,19 +362,44 @@
             playerChannelName.innerText = canalObj.nome.toUpperCase();
             playerChannelGroup.innerText = canalObj.grupo;
 
-            if (hls) hls.destroy();
+            // Limpeza robusta do stream anterior
+            if (hls) {
+                hls.stopLoad();
+                hls.detachMedia();
+                hls.destroy();
+                hls = null;
+            }
+            video.removeAttribute('src');
+            video.load();
+
+            statusText.innerText = "CARREGANDO";
+            statusDot.className = "dot loading";
             
             if (Hls.isSupported()) {
+                // HLS.js otimizado para abertura imediata (Baixa Latência)
                 hls = new Hls({
-                    manifestLoadingMaxRetry: 10,
-                    levelLoadingMaxRetry: 10
+                    liveSyncDurationCount: 2,
+                    liveMaxLatencyDurationCount: 5,
+                    enableWorker: true,
+                    lowLatencyMode: true,
+                    maxBufferLength: 8,
+                    maxMaxBufferLength: 15,
+                    manifestLoadingMaxRetry: 5,
+                    levelLoadingMaxRetry: 5
                 });
                 hls.loadSource(canalObj.url);
                 hls.attachMedia(video);
+                
                 hls.on(Hls.Events.MANIFEST_PARSED, () => { 
-                    video.play().catch(() => {}); 
-                    statusText.innerText = "AO VIVO";
+                    video.play().then(() => {
+                        statusText.innerText = "AO VIVO";
+                        statusDot.className = "dot";
+                    }).catch(() => {
+                        video.muted = true;
+                        video.play().catch(() => {});
+                    }); 
                 });
+
                 hls.on(Hls.Events.ERROR, (event, data) => { 
                     if(data.fatal) {
                         switch(data.type) {
@@ -387,13 +411,19 @@
                                 break;
                             default:
                                 hls.destroy();
+                                // Fallback direto para o player nativo se o HLS.js falhar
+                                video.src = canalObj.url;
+                                video.play().catch(() => {});
                                 break;
                         }
                     }
                 });
             } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
                 video.src = canalObj.url;
-                video.play().catch(() => {});
+                video.play().then(() => {
+                    statusText.innerText = "AO VIVO";
+                    statusDot.className = "dot";
+                }).catch(() => {});
             }
 
             showUI(); // Mostra a interface ao trocar de canal e reinicia o timer
@@ -403,7 +433,6 @@
 #EXTM3U
 #EXTINF:-1 tvg-id="kbstv.colombo" tvg-name="KBS TV Colombo" tvg-logo="https://yt3.googleusercontent.com/2IVQ9GRPg3OFWtm9qEC4DiHyiKHc-wmUCtR3pPEVhNT0o4gO-HlzWYUxYOS4EKaJ3kys40Gt-Pc=s900-c-k-c0x00ffffff-no-rj" group-title="📺 KBS TV",KBS TV COLOMBO
 https://live.kbstvpro.com.br/live/canal1.m3u8
-
 `;
 
         function parseM3U(data) {
